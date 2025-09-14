@@ -88,7 +88,7 @@ class CourseSearchTool(Tool):
     def _format_results(self, results: SearchResults) -> str:
         """Format search results with course and lesson context"""
         formatted = []
-        sources = []  # Track sources for the UI
+        sources_dict = {}  # Track unique sources by key
         
         for doc, meta in zip(results.documents, results.metadata):
             course_title = meta.get('course_title', 'unknown')
@@ -100,18 +100,106 @@ class CourseSearchTool(Tool):
                 header += f" - Lesson {lesson_num}"
             header += "]"
             
-            # Track source for the UI
-            source = course_title
-            if lesson_num is not None:
-                source += f" - Lesson {lesson_num}"
-            sources.append(source)
+            # Create unique key for deduplication
+            source_key = f"{course_title}|{lesson_num}"
+            
+            # Only add source if we haven't seen this course+lesson combo
+            if source_key not in sources_dict:
+                source_text = course_title
+                if lesson_num is not None:
+                    source_text += f" - Lesson {lesson_num}"
+                
+                # Get the lesson link if available
+                lesson_link = None
+                if lesson_num is not None:
+                    lesson_link = self.store.get_lesson_link(course_title, lesson_num)
+                
+                # Create source object with text and link
+                sources_dict[source_key] = {
+                    "text": source_text,
+                    "link": lesson_link
+                }
             
             formatted.append(f"{header}\n{doc}")
         
-        # Store sources for retrieval
-        self.last_sources = sources
+        # Convert dict values to list for storage
+        self.last_sources = list(sources_dict.values())
         
         return "\n\n".join(formatted)
+
+
+class CourseOutlineTool(Tool):
+    """Tool for getting course outlines with complete lesson lists"""
+    
+    def __init__(self, vector_store: VectorStore):
+        self.store = vector_store
+    
+    def get_tool_definition(self) -> Dict[str, Any]:
+        """Return Anthropic tool definition for this tool"""
+        return {
+            "name": "get_course_outline",
+            "description": "Get the complete outline and lesson list for a specific course",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "course_title": {
+                        "type": "string", 
+                        "description": "Course title or partial title (e.g. 'MCP', 'RAG', 'Chroma')"
+                    }
+                },
+                "required": ["course_title"]
+            }
+        }
+    
+    def execute(self, course_title: str) -> str:
+        """
+        Execute the course outline tool.
+        
+        Args:
+            course_title: Course title to get outline for
+            
+        Returns:
+            Formatted course outline with lessons or error message
+        """
+        # Step 1: Resolve course name using vector search
+        resolved_title = self.store._resolve_course_name(course_title)
+        if not resolved_title:
+            return f"No course found matching '{course_title}'"
+        
+        # Step 2: Get course metadata from catalog
+        try:
+            results = self.store.course_catalog.get(ids=[resolved_title])
+            if not results or not results['metadatas'] or not results['metadatas']:
+                return f"Course metadata not found for '{resolved_title}'"
+            
+            metadata = results['metadatas'][0]
+            
+            # Step 3: Parse and format the course outline
+            import json
+            course_link = metadata.get('course_link', 'No link available')
+            lessons_json = metadata.get('lessons_json', '[]')
+            lessons = json.loads(lessons_json)
+            
+            # Format the response
+            formatted_outline = [
+                f"**Course:** {resolved_title}",
+                f"**Course Link:** {course_link}",
+                f"**Lessons:**"
+            ]
+            
+            if lessons:
+                for lesson in lessons:
+                    lesson_num = lesson.get('lesson_number', 'Unknown')
+                    lesson_title = lesson.get('lesson_title', 'Unknown Title')
+                    formatted_outline.append(f"  {lesson_num}. {lesson_title}")
+            else:
+                formatted_outline.append("  No lessons found")
+            
+            return "\n".join(formatted_outline)
+            
+        except Exception as e:
+            return f"Error retrieving course outline: {str(e)}"
+
 
 class ToolManager:
     """Manages available tools for the AI"""

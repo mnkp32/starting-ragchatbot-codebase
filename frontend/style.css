@@ -220,29 +220,107 @@ header h1 {
 
 /* Collapsible Sources */
 .sources-collapsible {
-    margin-top: 0.5rem;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
+    margin-top: 0.75rem;
+    background: rgba(37, 99, 235, 0.05);
+    border: 1px solid rgba(37, 99, 235, 0.15);
+    border-radius: 8px;
+    overflow: hidden;
 }
 
 .sources-collapsible summary {
     cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    padding: 0.75rem 1rem;
     user-select: none;
-    font-weight: 500;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--primary-color);
+    background: rgba(37, 99, 235, 0.08);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .sources-collapsible summary:hover {
-    color: var(--text-primary);
+    background: rgba(37, 99, 235, 0.12);
+    color: var(--primary-color);
 }
 
-.sources-collapsible[open] summary {
-    margin-bottom: 0.25rem;
+.sources-collapsible summary::before {
+    content: '📄';
+    font-size: 0.9rem;
+}
+
+.sources-collapsible summary::-webkit-details-marker {
+    display: none;
+}
+
+.sources-collapsible summary::after {
+    content: '▼';
+    margin-left: auto;
+    font-size: 0.7rem;
+    transition: transform 0.2s ease;
+}
+
+.sources-collapsible[open] summary::after {
+    transform: rotate(180deg);
 }
 
 .sources-content {
-    padding: 0 0.5rem 0.25rem 1.5rem;
+    padding: 1rem;
+    background: rgba(37, 99, 235, 0.02);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* Source link styles - pill-shaped clickable badges */
+.source-link {
+    display: inline-block;
+    padding: 0.4rem 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    position: relative;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.source-link:hover {
+    background: var(--primary-color);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3);
+    border-color: var(--primary-color);
+}
+
+.source-link:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.source-link::after {
+    content: '↗';
+    margin-left: 0.3rem;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+.source-text {
+    display: inline-block;
+    padding: 0.4rem 0.75rem;
+    background: var(--background);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
     color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 500;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* Markdown formatting styles */
@@ -599,6 +677,44 @@ details[open] .suggested-header::before {
     color: var(--text-secondary);
     font-style: italic;
     text-transform: none;
+}
+
+/* New Chat Button */
+.new-chat-button {
+    padding: 0.5rem 0;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.new-chat-button:focus {
+    outline: none;
+    color: var(--primary-color);
+}
+
+.new-chat-button:hover {
+    color: var(--primary-color);
+}
+
+.new-chat-button:active {
+    color: var(--primary-color);
+}
+
+.new-chat-button svg {
+    flex-shrink: 0;
+    width: 12px;
+    height: 12px;
 }
 
 /* Suggested Questions in Sidebar */
