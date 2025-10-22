@@ -4,8 +4,12 @@ Test fixtures and utilities for RAG system tests.
 import pytest
 import sys
 import os
-from unittest.mock import Mock, MagicMock
+import asyncio
+from unittest.mock import Mock, MagicMock, patch
 from typing import Dict, List, Any
+from fastapi.testclient import TestClient
+import tempfile
+import shutil
 
 # Add backend directory to path so we can import modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -209,4 +213,163 @@ def create_mock_chroma_results(documents: List[str], metadata: List[Dict[str, An
         'documents': [documents],
         'metadatas': [metadata],
         'distances': [[0.1] * len(documents)]
+    }
+
+@pytest.fixture
+def mock_rag_system():
+    """Mock RAG system for API testing"""
+    mock = Mock()
+    mock.query.return_value = (
+        "This is a test response about RAG systems.",
+        [{"text": "Test Course - Lesson 1", "link": "https://example.com/lesson1"}]
+    )
+    mock.get_course_analytics.return_value = {
+        "total_courses": 2,
+        "course_titles": ["Introduction to RAG", "Advanced AI Concepts"]
+    }
+    mock.session_manager.create_session.return_value = "test_session_123"
+    mock.session_manager.clear_session.return_value = None
+    mock.add_course_folder.return_value = (2, 50)
+    return mock
+
+@pytest.fixture
+def test_app():
+    """Create test FastAPI app without static file mounting"""
+    from fastapi import FastAPI, HTTPException
+    from fastapi.middleware.cors import CORSMiddleware
+    from pydantic import BaseModel
+    from typing import List, Optional
+    
+    # Create test app with same endpoints but no static files
+    app = FastAPI(title="Course Materials RAG System Test")
+    
+    # Add CORS
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    # Pydantic models (same as main app)
+    class QueryRequest(BaseModel):
+        query: str
+        session_id: Optional[str] = None
+
+    class Source(BaseModel):
+        text: str
+        link: Optional[str] = None
+
+    class QueryResponse(BaseModel):
+        answer: str
+        sources: List[Source]
+        session_id: str
+
+    class CourseStats(BaseModel):
+        total_courses: int
+        course_titles: List[str]
+    
+    # Mock RAG system for the app
+    mock_rag = Mock()
+    mock_rag.query.return_value = (
+        "Test response",
+        [{"text": "Test source", "link": "https://example.com"}]
+    )
+    mock_rag.get_course_analytics.return_value = {
+        "total_courses": 1,
+        "course_titles": ["Test Course"]
+    }
+    mock_rag.session_manager.create_session.return_value = "test_session_123"
+    mock_rag.session_manager.clear_session.return_value = None
+    
+    # API endpoints (same as main app)
+    @app.post("/api/query", response_model=QueryResponse)
+    async def query_documents(request: QueryRequest):
+        try:
+            session_id = request.session_id or mock_rag.session_manager.create_session()
+            answer, sources = mock_rag.query(request.query, session_id)
+            
+            source_objects = []
+            for source in sources:
+                if isinstance(source, dict):
+                    source_objects.append(Source(**source))
+                else:
+                    source_objects.append(Source(text=source, link=None))
+            
+            return QueryResponse(
+                answer=answer,
+                sources=source_objects,
+                session_id=session_id
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/courses", response_model=CourseStats)
+    async def get_course_stats():
+        try:
+            analytics = mock_rag.get_course_analytics()
+            return CourseStats(
+                total_courses=analytics["total_courses"],
+                course_titles=analytics["course_titles"]
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.delete("/api/sessions/{session_id}/clear")
+    async def clear_session(session_id: str):
+        try:
+            mock_rag.session_manager.clear_session(session_id)
+            return {"message": "Session cleared successfully"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/")
+    async def root():
+        return {"message": "RAG System Test API"}
+    
+    return app
+
+@pytest.fixture
+def client(test_app):
+    """Test client for API testing"""
+    return TestClient(test_app)
+
+@pytest.fixture
+def temp_docs_dir():
+    """Create temporary docs directory for testing"""
+    temp_dir = tempfile.mkdtemp()
+    docs_dir = os.path.join(temp_dir, "docs")
+    os.makedirs(docs_dir)
+    
+    # Create sample documents
+    with open(os.path.join(docs_dir, "course1.txt"), "w") as f:
+        f.write("Introduction to RAG\nLesson 1: What is RAG?\nRAG combines retrieval and generation.")
+    
+    with open(os.path.join(docs_dir, "course2.txt"), "w") as f:
+        f.write("Advanced AI\nLesson 1: Vector Embeddings\nEmbeddings represent text numerically.")
+    
+    yield docs_dir
+    shutil.rmtree(temp_dir)
+
+@pytest.fixture
+def api_test_data():
+    """Test data for API endpoint testing"""
+    return {
+        "query_request": {
+            "query": "What is RAG?",
+            "session_id": "test_session_123"
+        },
+        "query_request_no_session": {
+            "query": "Explain vector embeddings"
+        },
+        "expected_response": {
+            "answer": "Test response",
+            "sources": [{"text": "Test source", "link": "https://example.com"}],
+            "session_id": "test_session_123"
+        },
+        "expected_courses": {
+            "total_courses": 1,
+            "course_titles": ["Test Course"]
+        }
     }
